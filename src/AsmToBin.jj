@@ -1,0 +1,94 @@
+/**
+ * JavaCC file for Intel Assembler syntax.
+ */options{  JDK_VERSION = "1.5";
+  LOOKAHEAD = 1;
+  STATIC = false;}PARSER_BEGIN(ASMPARSER)
+import java.io.FileReader;
+
+public class ASMPARSER{  public static void main(String args []) throws ParseException  {    System.out.println("Reading from: " + args [0]);    try    {      ASMPARSER parser = new ASMPARSER(new FileReader(args[0]));
+      switch (parser.asm_compilation_unit())      {        case 0 :         System.out.println("OK.");        break;        case 1 :         System.out.println("ERROR.");        default :         break;      }    }    catch (Exception e)    {      System.out.println("NOK.");      System.out.println(e.getMessage());    }    catch (Error e)    {      System.out.println("Oops.");      System.out.println(e.getMessage());    }  }}PARSER_END(ASMPARSER)SKIP :{  " "| "\r"| "\t"| "\n"|  < ";" (~["\n","\r"])* ("\n" | "\r" | "\r\n") >
+}TOKEN [IGNORE_CASE]: /* KEYWORDS */
+{
+  < NAME : "NAME" > 
+| < SEGMENT : "SEGMENT" >
+| < BYTE : "BYTE" >
+| < USE32 : "USE32" >
+| < RO : "RO" >
+| < ALIGN : "ALIGN" >
+| < ENDS : "ENDS" >
+| < END : "END" >
+| < DB : "DB" >
+| < DW : "DW" >
+| < DD : "DD" >
+}
+
+TOKEN : /* OPERATORS */{  < PLUS : "+" >| < MINUS : "-" >| < MULTIPLY : "*" >| < DIVIDE : "/" >}TOKEN :{  < CONSTANT : (< DIGIT >)+ >| < #DIGIT : [ "0"-"9" ] >
+| < IDENTIFIER : <LETTER> (<LETTER> | <DIGIT>)* >|  <#LETTER: ["$","A"-"Z","_","a"-"z"]>
+}int asm_compilation_unit() :{}{
+  name ()  (    segment()
+  )+
+  < END >  {    return 0;  }|   {    return 1;  }}
+void name() :
+{}
+{    < NAME > < IDENTIFIER >
+}
+void segment() :
+{}
+{
+    segment_header_statement()
+    (
+      < ALIGN > < CONSTANT >
+    )?
+    (      LOOKAHEAD(2)
+      data_statement()
+    )+
+    segment_ends_statement()
+}
+
+void segment_header_statement() :{}{    < IDENTIFIER >< SEGMENT > (segment_attribute())* 
+}
+void segment_ends_statement() :
+{}
+{
+    < IDENTIFIER > < ENDS >
+}
+void segment_attribute() :
+{}
+{
+    < BYTE >
+  | < USE32 >
+  | < RO >
+}
+
+void data_statement() :
+{}
+{
+    (      label()
+    )?
+    (      < DB >
+    | < DW >
+    | < DD >
+    )
+    expr()
+}
+
+void label() :
+{}
+{
+    < IDENTIFIER > ":"
+}
+
+void expr() :
+{}
+{  term()
+  (
+    (
+      < PLUS >
+    | < MINUS >
+    )
+    term()
+  )*
+}
+
+void term() :{}{  unary()  (    (      < MULTIPLY >    | < DIVIDE >    )    unary()  )*}void unary() :{}{  < MINUS > element()| element()}void element() :{}{  < CONSTANT >
+| < IDENTIFIER >| "(" expr() ")"}
