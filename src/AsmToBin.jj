@@ -5,10 +5,22 @@
   STATIC = false;}PARSER_BEGIN(ASMPARSER)
 import java.io.File;
 import java.io.FileReader;
+import java.util.HashMap;
+import java.io.FileOutputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 
 public class ASMPARSER{
-  final static String version = "AsmToBin v1.00, 21.12.2014";
+
+  final static String version = "AsmToBin v1.01, 21.12.2014";
+
+  /*
+  * symbol table containg all defined labels
+  */
+  static HashMap<String,Integer> symtab = new HashMap<String,Integer>();
+  static FileOutputStream outf;
   
+  public int pass;
   public String segmentname;
   public int offset;
     public static void main(String args []) throws ParseException  {    System.out.println(version);
@@ -23,8 +35,44 @@ public class ASMPARSER{
     System.out.println("Reading from: \"" + args[0] + "\"");
     System.out.println("Writing to: \"" + args [1] + "\"");
 
-    try    {      ASMPARSER parser = new ASMPARSER(new FileReader(infile));
-      switch (parser.asm_compilation_unit())      {        case 0 :         System.out.println("OK.");        break;        case 1 :         System.out.println("ERROR.");        default :         break;      }    }    catch (Exception e)    {      System.out.println("NOK.");      System.out.println(e.getMessage());    }    catch (Error e)    {      System.out.println("Oops.");      System.out.println(e.getMessage());    }  }}PARSER_END(ASMPARSER)SKIP :{  " "| "\r"| "\t"| "\n"|  < ";" (~["\n","\r"])* ("\n" | "\r" | "\r\n") >
+    try    {      ASMPARSER pass1 = new ASMPARSER(new FileReader(infile));
+      pass1.pass = 1;
+      System.out.println("Pass1.");
+      pass1.asm_compilation_unit();
+      System.out.println("Pass1 OK.");
+
+      ASMPARSER pass2 = new ASMPARSER(new FileReader(infile));
+      pass2.pass = 2;
+      System.out.println("Pass2.");
+      outf= new FileOutputStream (outfile);
+      pass2.asm_compilation_unit();
+      outf.close();
+      System.out.println("Pass2 OK.");
+
+    } catch (FileNotFoundException e) {
+        System.err.println(e.getMessage());
+        e.printStackTrace();
+    } catch (IOException e) {
+        System.err.println(e.getMessage());
+        e.printStackTrace();
+    } catch (Exception e) {        System.out.println("NOK. Exception.");        System.out.println(e.getMessage());        e.printStackTrace();
+    }    catch (Error e) {        System.out.println("Oops. Error.");        System.out.println(e.getMessage());        e.printStackTrace();
+    }  }
+
+  void wr (int val, int len)
+  {
+    try    {      while (len > 0)      {
+        outf.write (val % 256); // write lsb
+        val = val / 256;
+        len--;      }
+    }
+    catch (IOException e)    {        System.out.println(e.getMessage());
+        e.printStackTrace();
+        System.exit (-1);
+    }
+  }
+  
+}PARSER_END(ASMPARSER)SKIP :{  " "| "\r"| "\t"| "\n"|  < ";" (~["\n","\r"])* ("\n" | "\r" | "\r\n") >
 }TOKEN [IGNORE_CASE]: /* KEYWORDS */
 {
   < NAME : "NAME" > 
@@ -97,6 +145,7 @@ void segment_ends_statement() :
 void data_statement() :
 {
   int ddlen;
+  int val;
 }
 {
     (      label()
@@ -112,8 +161,14 @@ void data_statement() :
          ddlen = 4;
       }
     )
-    expr()
+    val = expr()
     {      offset += ddlen;
+      if (pass ==2)
+      {
+        // write val with ddlen bytes into outf
+        //System.out.println("val="+val+", ddlen="+ddlen);
+        wr (val, ddlen);
+      }
     }
 }
 
@@ -125,21 +180,78 @@ void label() :
     < IDENTIFIER >    {      label = token.image;
     }
     ":"
-    {      System.out.println("Define label \"" + label + "\" at offset " + offset);
+    {
+      if (pass ==1)      {        System.out.println("Define label \"" + label + "\" at offset " + offset);
+        symtab.put (label, offset);
+      }
     }
 }
 
-void expr() :
-{}
-{  term()
+int expr() :
+{
+  int a;
+  int b;
+  int val;
+}
+{  a = term()
+  {    val = a;
+  }
   (
     (
-      < PLUS >
-    | < MINUS >
+      < PLUS >      b = term()
+      {        val += b;
+      }
+    | < MINUS >      b = term()
+      {        val -= b;
+      }
     )
-    term()
   )*
+  {    return val;
+  }
 }
 
-void term() :{}{  unary()  (    (      < MULTIPLY >    | < DIVIDE >    )    unary()  )*}void unary() :{}{  < MINUS > element()| element()}void element() :{}{  < CONSTANT >
-| < IDENTIFIER >| "(" expr() ")"}
+int term() :{
+  int a;
+  int b;
+  int val;
+}{  a = unary()  {
+    val = a;
+  }
+  (    (      < MULTIPLY >      b = unary()
+      {
+        val = val * b;
+      }
+    | < DIVIDE >      b = unary()
+      {
+        val = val / b;
+      }
+    )  )*  {
+    return val;
+  }
+}int unary() :{
+  int a;
+  int val;
+}{  < MINUS >
+  a = element()
+  {    return val = -a;
+  }| val = element()  {
+    return val;
+  }
+}int element() :{
+  int val;
+  Token t;
+}{  t = < CONSTANT >
+  {    val = Integer.parseInt(t.image);
+    return val;
+  }
+| t = < IDENTIFIER >
+  {
+    if (pass == 2)    {      Integer value = symtab.get (t.image);
+      // TODO: check value for not being null
+      return val = value;
+    }
+    else    {      return 1;
+    }
+  }| "(" val = expr() ")"
+  {    return val;
+  }}
