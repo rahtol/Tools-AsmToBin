@@ -12,7 +12,7 @@ import java.io.IOException;
 
 public class ASMPARSER{
 
-  final static String version = "AsmToBin v1.01, 21.12.2014";
+  final static String version = "AsmToBin v1.02, 22.12.2014";
 
   /*
   * symbol table containg all defined labels
